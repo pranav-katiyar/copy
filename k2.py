@@ -1,42 +1,51 @@
-import boto3
+import subprocess
 import io
 import wave
-from array import array
+import boto3
+from botocore.exceptions import NoCredentialsError
 
-# Initialize AWS Kinesis Video client
+# Initialize AWS Kinesis Video and S3 clients
 kvs = boto3.client('kinesisvideo', region_name='YOUR_REGION')
+s3 = boto3.client('s3', region_name='YOUR_REGION')
 
-# Configure your Kinesis Video Stream
+# Configure your Kinesis Video Stream and S3 bucket
 stream_name = 'YOUR_KINESIS_STREAM'
+s3_bucket = 'YOUR_S3_BUCKET'
+wav_key = 'output.wav'
 
-def extract_audio_from_frame(frame_data):
-    # Implement audio extraction from video frame data
-    # You need to decode video frames and extract audio data
-    # For H.264-encoded video streams, you may need to parse the audio packets
+def extract_and_save_audio(event, context):
+    kvs_stream = kvs.get_data_endpoint(StreamName=stream_name, APIName='GET_MEDIA')['DataEndpoint']
 
-    # Replace this with your audio extraction logic
-    audio_data = b''  # Your extracted audio data
-
-    return audio_data
-
-def lambda_handler(event, context):
-    # Retrieve video frames and extract audio
-    # You'll need to implement this part using Boto3 and Kinesis Video APIs
-
-    # Extracted audio data (assuming you have it in an audio variable)
-
+    # Fetch video frames
+    stream_data = kvs.get_media(StartSelector={'StartSelectorType': 'EARLIEST'})
+    
+    audio_data = b''  # Initialize audio data buffer
+    
+    while True:
+        frame = next(stream_data)
+        if frame:
+            frame_data = frame['Payload'].read()
+            
+            # Extract and decode audio packets from the video frame
+            # You will need to implement the specific logic for your codec
+            
+            # Append the audio data to the buffer
+            audio_data += extracted_audio_data
+            
+        else:
+            break
+    
     # Save the extracted audio as a WAV file
-    wav_output = '/tmp/output.wav'
-    with wave.open(wav_output, 'wb') as wf:
+    with wave.open('/tmp/output.wav', 'wb') as wf:
         wf.setnchannels(2)  # 2 channels for stereo audio
         wf.setsampwidth(2)  # 16-bit audio
         wf.setframerate(44100)  # Sample rate (adjust as needed)
-        wf.writeframes(array('h', audio_data))
-
-    # Upload the WAV file to S3 or perform other actions as needed
-    # You may use Boto3 to upload the file to an S3 bucket
-
+        wf.writeframes(audio_data)
+    
+    # Upload the WAV file to S3 or perform further actions as needed
+    s3.upload_file('/tmp/output.wav', s3_bucket, wav_key)
+    
     return {
         'statusCode': 200,
-        'body': 'Audio extraction and WAV conversion successful.'
+        'body': 'Audio extraction and WAV conversion complete.'
     }
